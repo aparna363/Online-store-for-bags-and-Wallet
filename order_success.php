@@ -501,14 +501,7 @@ class OrderSuccessView {
                                 </span>
                             </span>
                         </div>
-                        <div class="info-row">
-                            <span class="info-label">Order Status:</span>
-                            <span>
-                                <span class="badge <?php echo $this->order->getStatusBadgeClass(); ?>">
-                                    <?php echo ucfirst($this->order->getOrderStatus()); ?>
-                                </span>
-                            </span>
-                        </div>
+                        
                         <?php if ($this->order->getRazorpayPaymentId()): ?>
                         <div class="info-row">
                             <span class="info-label">Payment ID:</span>

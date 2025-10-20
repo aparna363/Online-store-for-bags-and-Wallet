@@ -208,10 +208,7 @@ $amount_in_paise = $total * 100;
         <p style="margin-top:10px; color:#666;">Processing payment...</p>
       </div>
       
-      <div class="secure-badge">
-        <span>🔒</span>
-        <span>Secure Payment | SSL Encrypted</span>
-      </div>
+     
       
       <a href="checkout.php" class="back-link">← Back to Checkout</a>
     </div>

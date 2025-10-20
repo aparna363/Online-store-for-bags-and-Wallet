@@ -1,4 +1,19 @@
 <?php
+session_start();
+
+// Check if admin is logged in
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+    header("Location: Admin_login.php");
+    exit();
+}
+
+// Handle logout
+if (isset($_GET['logout'])) {
+    session_destroy();
+    header("Location: admin_login.php");
+    exit();
+}
+
 require_once("db.php");
 require_once("Product.php");
 
@@ -48,12 +63,17 @@ if ($allProducts === null) {
   <style>
     * {margin:0; padding:0; box-sizing:border-box; font-family:'Poppins',sans-serif;}
     body {background:#fffaf5; color:#333; padding:30px;}
-    h1 {text-align:center; color:#f4a261; margin-bottom:20px;}
+    .header {display:flex; justify-content:space-between; align-items:center; margin-bottom:30px; background:#fff; padding:20px; border-radius:10px; box-shadow:0 4px 20px rgba(244,162,97,0.2);}
+    .header h1 {color:#f4a261; margin:0;}
+    .admin-info {display:flex; align-items:center; gap:15px;}
+    .admin-badge {background:#e74c3c; color:#fff; padding:5px 15px; border-radius:20px; font-size:0.85rem; font-weight:600;}
+    .logout-btn {background:#e74c3c; color:#fff; padding:8px 20px; border:none; border-radius:8px; font-weight:600; cursor:pointer; text-decoration:none; display:inline-block;}
+    .logout-btn:hover {background:#c0392b;}
     .form-container {background:#fff; padding:20px; border-radius:10px; max-width:600px; margin:0 auto 40px; box-shadow:0 4px 20px rgba(244,162,97,0.2);}
     form input, form select, form button {width:100%; padding:10px; margin:10px 0; border:1px solid #ccc; border-radius:5px;}
     button {background:#f4a261; color:white; font-weight:600; border:none; cursor:pointer;}
     button:hover {background:#e07b39;}
-    table {width:100%; border-collapse:collapse; margin-top:30px;}
+    table {width:100%; border-collapse:collapse; margin-top:30px; background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 4px 20px rgba(244,162,97,0.2);}
     th, td {border:1px solid #ddd; padding:10px; text-align:center;}
     th {background:#f4a261; color:#fff;}
     tr:nth-child(even){background:#fdf1e7;}
@@ -65,7 +85,14 @@ if ($allProducts === null) {
 </head>
 <body>
 
-  <h1>👜 HappyPouch Admin Dashboard</h1>
+  <div class="header">
+    <h1>👜 HappyPouch Admin Dashboard</h1>
+    <div class="admin-info">
+      <span class="admin-badge">🔐 Admin</span>
+      <span style="color:#666;"><?= htmlspecialchars($_SESSION['admin_email']) ?></span>
+      <a href="?logout=1" class="logout-btn" onclick="return confirm('Are you sure you want to logout?')">Logout</a>
+    </div>
+  </div>
 
   <div class="form-container">
     <h3>Add New Product</h3>
