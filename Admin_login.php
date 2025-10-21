@@ -9,10 +9,9 @@ if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true
 
 $error = "";
 
-// Admin credentials (you can change these)
-define('ADMIN_EMAIL', 'admin@gmail.com');
-define('ADMIN_PASSWORD', 'Admin@123'); // Change this to a secure password
 
+define('ADMIN_EMAIL', 'admin@gmail.com');
+define('ADMIN_PASSWORD', 'Admin@123'); 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';

@@ -1,7 +1,6 @@
 <?php
 require_once("db.php");
 
-
 class Product {
     private $conn;
     
@@ -21,12 +20,57 @@ class Product {
         $stmt->bind_param("sdsis", $title, $price, $image, $quantity, $category);
         
         if ($stmt->execute()) {
+            $_SESSION['success_message'] = "Product added successfully!";
             header("Location: Admin.php");
             exit();
         } else {
-            echo "Error: " . $stmt->error;
+            $_SESSION['error_message'] = "Error adding product: " . $stmt->error;
+            header("Location: Admin.php");
+            exit();
         }
         $stmt->close();
+    }
+    
+    // Update an existing product
+    public function updateProduct($id, $title, $price, $quantity, $category, $newImage = null) {
+        try {
+            if ($newImage) {
+                // Get old image to delete it
+                $stmt = $this->conn->prepare("SELECT image FROM products WHERE id = ?");
+                $stmt->bind_param("i", $id);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                
+                if ($row = $result->fetch_assoc()) {
+                    $oldImagePath = "uploads/" . $row['image'];
+                    if (file_exists($oldImagePath)) {
+                        unlink($oldImagePath);
+                    }
+                }
+                $stmt->close();
+                
+                // Update with new image
+                $stmt = $this->conn->prepare("UPDATE products SET title = ?, price = ?, quantity = ?, category = ?, image = ? WHERE id = ?");
+                $stmt->bind_param("sdissi", $title, $price, $quantity, $category, $newImage, $id);
+            } else {
+                // Update without changing image
+                $stmt = $this->conn->prepare("UPDATE products SET title = ?, price = ?, quantity = ?, category = ? WHERE id = ?");
+                $stmt->bind_param("sdisi", $title, $price, $quantity, $category, $id);
+            }
+            
+            if ($stmt->execute()) {
+                $_SESSION['success_message'] = "Product updated successfully!";
+            } else {
+                $_SESSION['error_message'] = "Error updating product: " . $stmt->error;
+            }
+            $stmt->close();
+            
+        } catch (Exception $e) {
+            $_SESSION['error_message'] = "Error updating product: " . $e->getMessage();
+        }
+        
+        header("Location: Admin.php");
+        exit();
     }
     
     // Get all products - ALWAYS returns an array
@@ -71,31 +115,68 @@ class Product {
         }
     }
     
-    // Delete a product
+    // Delete a product (with foreign key constraint handling)
     public function deleteProduct($id) {
-        // Get image filename before deleting
-        $stmt = $this->conn->prepare("SELECT image FROM products WHERE id = ?");
-        $stmt->bind_param("i", $id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        
-        if ($row = $result->fetch_assoc()) {
-            $imagePath = "uploads/" . $row['image'];
-            if (file_exists($imagePath)) {
-                unlink($imagePath);
+        try {
+            // Start transaction
+            $this->conn->begin_transaction();
+            
+            // Get image filename before deleting
+            $stmt = $this->conn->prepare("SELECT image FROM products WHERE id = ?");
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
+            if ($row = $result->fetch_assoc()) {
+                $imagePath = "uploads/" . $row['image'];
+                
+                // Check if product has associated order items
+                $checkStmt = $this->conn->prepare("SELECT COUNT(*) as count FROM order_items WHERE product_id = ?");
+                $checkStmt->bind_param("i", $id);
+                $checkStmt->execute();
+                $checkResult = $checkStmt->get_result();
+                $countRow = $checkResult->fetch_assoc();
+                $checkStmt->close();
+                
+                if ($countRow['count'] > 0) {
+                    // Product has order history - prevent deletion
+                    $this->conn->rollback();
+                    $_SESSION['error_message'] = "Cannot delete this product. It has been ordered by customers. Consider marking it as out of stock instead.";
+                    header("Location: Admin.php");
+                    exit();
+                }
+                
+                // Delete from database
+                $deleteStmt = $this->conn->prepare("DELETE FROM products WHERE id = ?");
+                $deleteStmt->bind_param("i", $id);
+                $deleteStmt->execute();
+                $deleteStmt->close();
+                
+                // Delete image file if exists
+                if (file_exists($imagePath)) {
+                    unlink($imagePath);
+                }
+                
+                // Commit transaction
+                $this->conn->commit();
+                $_SESSION['success_message'] = "Product deleted successfully!";
+                header("Location: Admin.php");
+                exit();
             }
-        }
-        $stmt->close();
-        
-        // Delete from database
-        $stmt = $this->conn->prepare("DELETE FROM products WHERE id = ?");
-        $stmt->bind_param("i", $id);
-        
-        if ($stmt->execute()) {
+            
+            $stmt->close();
+            $this->conn->rollback();
+            $_SESSION['error_message'] = "Product not found.";
+            header("Location: Admin.php");
+            exit();
+            
+        } catch (Exception $e) {
+            $this->conn->rollback();
+            error_log("Error deleting product: " . $e->getMessage());
+            $_SESSION['error_message'] = "Error deleting product: " . $e->getMessage();
             header("Location: Admin.php");
             exit();
         }
-        $stmt->close();
     }
     
     // Get a single product by ID

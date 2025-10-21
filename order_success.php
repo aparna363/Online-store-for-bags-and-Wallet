@@ -489,10 +489,7 @@ class OrderSuccessView {
                             <span class="info-label">Order Date:</span>
                             <span><?php echo $this->order->getFormattedDate(); ?> at <?php echo $this->order->getFormattedTime(); ?></span>
                         </div>
-                        <div class="info-row">
-                            <span class="info-label">Payment Method:</span>
-                            <span class="text-capitalize"><?php echo htmlspecialchars($this->order->getPaymentMethod()); ?></span>
-                        </div>
+                       
                         <div class="info-row">
                             <span class="info-label">Payment Status:</span>
                             <span>
@@ -577,32 +574,7 @@ class OrderSuccessView {
                     </div>
                 </div>
 
-                <!-- What's Next -->
-                <div class="order-card">
-                    <div class="card-header-custom">
-                        <i class="fas fa-clipboard-list me-2"></i>What's Next?
-                    </div>
-                    <div class="card-body-custom">
-                        <div class="timeline">
-                            <div class="timeline-item">
-                                <strong>Order Confirmed</strong>
-                                <p class="text-muted mb-0 small">We've received your order</p>
-                            </div>
-                            <div class="timeline-item">
-                                <strong>Processing</strong>
-                                <p class="text-muted mb-0 small">We're preparing your items</p>
-                            </div>
-                            <div class="timeline-item">
-                                <strong>Shipped</strong>
-                                <p class="text-muted mb-0 small">You'll receive tracking details via email</p>
-                            </div>
-                            <div class="timeline-item">
-                                <strong>Delivered</strong>
-                                <p class="text-muted mb-0 small">Enjoy your purchase!</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+              
 
                 <!-- Action Buttons -->
                 <div class="action-buttons flex-column">
@@ -612,15 +584,88 @@ class OrderSuccessView {
                     <a href="my_orders.php" class="btn btn-outline-custom btn-custom w-100">
                         <i class="fas fa-list me-2"></i>View All Orders
                     </a>
-                    <button onclick="window.print()" class="btn btn-outline-custom btn-custom w-100">
-                        <i class="fas fa-print me-2"></i>Print Order
-                    </button>
+                    <button type="button" onclick="printReceipt()" class="btn btn-outline-custom btn-custom w-100">
+  <i class="fas fa-print me-2"></i>Print Receipt
+</button>
+
                 </div>
             </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Hidden printable receipt -->
+<div id="receipt-section" style="display:none;">
+  <div style="width:80%;margin:auto;font-family:'Segoe UI',Tahoma,sans-serif;">
+    <h2 style="text-align:center;">Order Receipt</h2>
+    <hr>
+    <p><strong>Order Number:</strong> <?php echo htmlspecialchars($this->order->getOrderNumber()); ?></p>
+    <p><strong>Date:</strong> <?php echo $this->order->getFormattedDate(); ?> at <?php echo $this->order->getFormattedTime(); ?></p>
+    <p><strong>Name:</strong> <?php echo htmlspecialchars($this->order->getFullName()); ?></p>
+    <p><strong>Phone:</strong> <?php echo htmlspecialchars($this->order->getPhone()); ?></p>
+    <p><strong>Email:</strong> <?php echo htmlspecialchars($this->order->getEmail()); ?></p>
+    <p><strong>Address:</strong> <?php echo htmlspecialchars($this->order->getFullAddress()); ?></p>
+    <hr>
+    <h4>Items</h4>
+    <table width="100%" border="1" cellspacing="0" cellpadding="8">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Qty</th>
+          <th>Price (₹)</th>
+          <th>Subtotal (₹)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach ($this->order->getItems() as $item): ?>
+        <tr>
+          <td><?php echo htmlspecialchars($item->getProductTitle()); ?></td>
+          <td><?php echo $item->getQuantity(); ?></td>
+          <td><?php echo number_format($item->getPrice(), 2); ?></td>
+          <td><?php echo number_format($item->getSubtotal(), 2); ?></td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+    <hr>
+    <p><strong>Subtotal:</strong> ₹<?php echo number_format($this->order->getSubtotal(), 2); ?></p>
+    <p><strong>Tax (18%):</strong> ₹<?php echo number_format($this->order->getTax(), 2); ?></p>
+    <p><strong>Total Paid:</strong> ₹<?php echo number_format($this->order->getTotal(), 2); ?></p>
+    <hr>
+    <p style="text-align:center;">Thank you for shopping with us!</p>
+  </div>
+</div>
+
+<script>
+function printReceipt() {
+  const section = document.getElementById("receipt-section");
+  if (!section) {
+    alert("Receipt section not found!");
+    return;
+  }
+  const newWindow = window.open('', '_blank');
+  newWindow.document.write(`
+    <html>
+      <head>
+        <title>Order Receipt</title>
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 40px; }
+          table { border-collapse: collapse; width: 100%; }
+          th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+          th { background: #f4a261; color: white; }
+        </style>
+      </head>
+      <body>
+        ${section.innerHTML}
+      </body>
+    </html>
+  `);
+  newWindow.document.close();
+  newWindow.focus();
+  newWindow.print();
+}
+</script>
+
 </body>
 </html>
         <?php

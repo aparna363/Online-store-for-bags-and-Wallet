@@ -126,7 +126,7 @@ class User {
         if (!isset($_SESSION)) {
             session_start();
         }
-        
+
         if (self::isLoggedIn()) {
             return [
                 'id' => $_SESSION['user_id'],
@@ -135,6 +135,23 @@ class User {
             ];
         }
         return null;
+    }
+
+    // Get current user ID
+    public static function getCurrentUserId() {
+        $user = self::getCurrentUser();
+        return $user ? $user['id'] : null;
+    }
+
+    // Get current user full name
+    public static function getCurrentUserFullName() {
+        $user = self::getCurrentUser();
+        return $user ? $user['name'] : null;
+    }
+
+    // Get current username (same as full name for now)
+    public static function getCurrentUsername() {
+        return self::getCurrentUserFullName();
     }
     
     // Get user's login history

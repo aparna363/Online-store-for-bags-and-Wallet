@@ -60,6 +60,50 @@ $currentUser = User::getCurrentUser();
       .section {padding:60px 20px;}
       nav {flex-wrap:wrap;justify-content:center;}
     }
+    /* Dropdown Menu */
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dropbtn {
+  background: none;
+  border: none;
+  color: #f4a261;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.dropdown-content {
+  display: none;
+  position: absolute;
+  right: 0;
+  background-color: white;
+  min-width: 150px;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+  border-radius: 10px;
+  z-index: 1;
+}
+
+.dropdown-content a {
+  color: #333;
+  padding: 10px 15px;
+  text-decoration: none;
+  display: block;
+  transition: 0.2s;
+}
+
+.dropdown-content a:hover {
+  background-color: #f4a261;
+  color: white;
+  border-radius: 10px;
+}
+
+.dropdown:hover .dropdown-content {
+  display: block;
+}
+
   </style>
 </head>
 <body>
@@ -73,9 +117,14 @@ $currentUser = User::getCurrentUser();
       
       <?php if ($isLoggedIn): ?>
         <div class="user-menu">
-          <span class="user-name">Hi, <?= htmlspecialchars($currentUser['name']) ?>!</span>
-          <a href="logout.php">Logout</a>
-        </div>
+    <div class="dropdown">
+      <button class="dropbtn">Hi, <?= htmlspecialchars($currentUser['name']) ?> ▼</button>
+      <div class="dropdown-content">
+        <a href="my_orders.php">My Orders</a>
+        <a href="logout.php">Logout</a>
+      </div>
+    </div>
+  </div>
       <?php else: ?>
         <div class="auth-buttons">
           <a href="login.php" class="login-btn">Login</a>

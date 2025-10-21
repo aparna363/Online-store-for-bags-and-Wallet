@@ -106,7 +106,7 @@ $currentUser = User::getCurrentUser();
     <h1 onclick="window.location.href='index.php'">HappyPouch</h1>
     <nav>
       <a href="index.php">Home</a>
-      <a href="products.php">Products</a>
+      
       <?php if ($isLoggedIn): ?>
         <a href="cart.php">
           <span class="cart-icon">🛒 <span class="cart-count" id="cartCount">0</span></span>
