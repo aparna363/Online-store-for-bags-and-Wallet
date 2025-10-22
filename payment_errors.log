@@ -1,0 +1,33 @@
+[22-Oct-2025 15:52:13 Europe/Berlin] === PROCESS PAYMENT SCRIPT STARTED ===
+[22-Oct-2025 15:52:13 Europe/Berlin] Request Method: POST
+[22-Oct-2025 15:52:13 Europe/Berlin] POST Data: Array
+(
+    [razorpay_payment_id] => pay_RWXeIbkrpDBJXT
+    [razorpay_order_id] => 
+    [razorpay_signature] => 
+    [order_number] => HP2025102269063C
+)
+
+[22-Oct-2025 15:52:13 Europe/Berlin] Processing payment for user ID: 1
+[22-Oct-2025 15:52:13 Europe/Berlin] Checkout data retrieved from session
+[22-Oct-2025 15:52:13 Europe/Berlin] Payment Data collected: razorpay_payment_id=pay_RWXeIbkrpDBJXT
+[22-Oct-2025 15:52:13 Europe/Berlin] Order Number: HP2025102269063C
+[22-Oct-2025 15:52:13 Europe/Berlin] Creating PaymentProcessor instance
+[22-Oct-2025 15:52:13 Europe/Berlin] Calling processRazorpayPayment method
+[22-Oct-2025 15:52:13 Europe/Berlin] === STARTING PAYMENT PROCESSING ===
+[22-Oct-2025 15:52:13 Europe/Berlin] User ID: 1
+[22-Oct-2025 15:52:13 Europe/Berlin] Retrieved 1 cart items for user 1
+[22-Oct-2025 15:52:13 Europe/Berlin] Cart items count: 1
+[22-Oct-2025 15:52:13 Europe/Berlin] Transaction started
+[22-Oct-2025 15:52:13 Europe/Berlin] Order HP2025102269063C - Razorpay Payment ID: pay_RWXeIbkrpDBJXT (not saved - column missing)
+[22-Oct-2025 15:52:13 Europe/Berlin] Order saved successfully with ID: 28
+[22-Oct-2025 15:52:13 Europe/Berlin] Order created with ID: 28
+[22-Oct-2025 15:52:13 Europe/Berlin] Cart cleared for user 1
+[22-Oct-2025 15:52:13 Europe/Berlin] Cart cleared
+[22-Oct-2025 15:52:13 Europe/Berlin] Transaction committed
+[22-Oct-2025 15:52:13 Europe/Berlin] === PAYMENT PROCESSING SUCCESSFUL ===
+[22-Oct-2025 15:52:13 Europe/Berlin] Payment processed successfully!
+[22-Oct-2025 15:52:13 Europe/Berlin] Order Number: HP2025102269063C
+[22-Oct-2025 15:52:13 Europe/Berlin] Session updated with success message
+[22-Oct-2025 15:52:13 Europe/Berlin] Attempting redirect to order_success.php
+[22-Oct-2025 15:52:13 Europe/Berlin] Attempting redirect to: order_success.php?order=HP2025102269063C

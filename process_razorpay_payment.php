@@ -1,52 +1,64 @@
 <?php
+// Enable error reporting for debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 0); // Set to 1 temporarily for debugging
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/payment_errors.log');
+
 // Start output buffering to prevent any accidental output
 ob_start();
 
 session_start();
-require_once("db.php");
-require_once("User.php");
 
-// PHPMailer for email notifications
-require 'PHPMailer-master/src/Exception.php';
-require 'PHPMailer-master/src/PHPMailer.php';
-require 'PHPMailer-master/src/SMTP.php';
+// Check if required files exist before including
+$required_files = ['db.php', 'User.php'];
+foreach ($required_files as $file) {
+    if (!file_exists(__DIR__ . '/' . $file)) {
+        error_log("CRITICAL: Required file missing: " . $file);
+        die("System configuration error. Please contact support.");
+    }
+}
 
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
+require_once(__DIR__ . "/db.php");
+require_once(__DIR__ . "/User.php");
 
 // ==================== HELPER FUNCTION ====================
 /**
- * Safe redirect function that works in both localhost and production
+ * Safe redirect function with multiple fallback methods
  */
 function safeRedirect($page, $params = []) {
-    // Clear any output buffers
+    // Clear all output buffers
     while (ob_get_level()) {
         ob_end_clean();
     }
     
-    // Build absolute URL
-    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https" : "http";
-    $host = $_SERVER['HTTP_HOST'];
-    
-    // Get the directory path (handles subdirectories)
-    $scriptPath = dirname($_SERVER['SCRIPT_NAME']);
-    if ($scriptPath === '/' || $scriptPath === '\\') {
-        $scriptPath = '';
-    }
-    
-    // Build URL
-    $url = $protocol . "://" . $host . $scriptPath . "/" . ltrim($page, '/');
-    
-    // Add query parameters
+    // Build URL with parameters
+    $url = $page;
     if (!empty($params)) {
         $url .= '?' . http_build_query($params);
     }
     
-    // Log for debugging
-    error_log("Redirecting to: " . $url);
+    error_log("Attempting redirect to: " . $url);
     
-    // Perform redirect
-    header("Location: " . $url, true, 302);
+    // Method 1: PHP Header Redirect
+    if (!headers_sent()) {
+        header("Location: " . $url, true, 302);
+        exit();
+    }
+    
+    // Method 2: JavaScript Redirect (if headers already sent)
+    echo '<!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta http-equiv="refresh" content="0;url=' . htmlspecialchars($url) . '">
+        <title>Redirecting...</title>
+    </head>
+    <body>
+        <script>window.location.href = "' . htmlspecialchars($url) . '";</script>
+        <p>Redirecting... <a href="' . htmlspecialchars($url) . '">Click here if not redirected automatically</a></p>
+    </body>
+    </html>';
     exit();
 }
 
@@ -101,20 +113,6 @@ class Order {
     // Getters
     public function getId(): ?int { return $this->id; }
     public function getOrderNumber(): string { return $this->orderNumber; }
-    public function getEmail(): string { return $this->email; }
-    public function getFullName(): string { return $this->fullName; }
-    public function getTotal(): float { return $this->total; }
-    public function getSubtotal(): float { return $this->subtotal; }
-    public function getTax(): float { return $this->tax; }
-    public function getItems(): array { return $this->items; }
-    public function getPhone(): string { return $this->phone; }
-    public function getAddressLine1(): string { return $this->addressLine1; }
-    public function getAddressLine2(): string { return $this->addressLine2; }
-    public function getCity(): string { return $this->city; }
-    public function getState(): string { return $this->state; }
-    public function getPincode(): string { return $this->pincode; }
-    public function getCountry(): string { return $this->country; }
-    public function getRazorpayPaymentId(): ?string { return $this->razorpayPaymentId; }
     
     // Setters
     public function setId(int $id): void { $this->id = $id; }
@@ -126,15 +124,15 @@ class Order {
     public function setItems(array $items): void { $this->items = $items; }
     
     public function setCustomerDetails(array $data): void {
-        $this->fullName = $data['full_name'];
-        $this->email = $data['email'];
-        $this->phone = $data['phone'];
-        $this->addressLine1 = $data['address_line1'];
+        $this->fullName = $data['full_name'] ?? '';
+        $this->email = $data['email'] ?? '';
+        $this->phone = $data['phone'] ?? '';
+        $this->addressLine1 = $data['address_line1'] ?? '';
         $this->addressLine2 = $data['address_line2'] ?? '';
-        $this->city = $data['city'];
-        $this->state = $data['state'];
-        $this->pincode = $data['pincode'];
-        $this->country = $data['country'];
+        $this->city = $data['city'] ?? '';
+        $this->state = $data['state'] ?? '';
+        $this->pincode = $data['pincode'] ?? '';
+        $this->country = $data['country'] ?? '';
         $this->orderNotes = $data['order_notes'] ?? '';
     }
     
@@ -261,7 +259,7 @@ class OrderRepository {
                 $data['order_notes'], $data['subtotal'], $data['tax'], $data['total']
             );
             
-            error_log("Order {$data['order_number']} - Razorpay Payment ID: {$data['razorpay_payment_id']}");
+            error_log("Order {$data['order_number']} - Razorpay Payment ID: {$data['razorpay_payment_id']} (not saved - column missing)");
         }
         
         if (!$stmt->execute()) {
@@ -384,157 +382,13 @@ class ProductRepository {
 }
 
 // ==================== SERVICE CLASSES ====================
-class EmailService {
-    private $config;
-    
-    public function __construct(array $config) {
-        $this->config = $config;
-    }
-    
-    public function sendOrderConfirmation(Order $order): bool {
-        $mail = new PHPMailer(true);
-        
-        try {
-            $mail->isSMTP();
-            $mail->Host = $this->config['host'];
-            $mail->SMTPAuth = true;
-            $mail->Username = $this->config['username'];
-            $mail->Password = $this->config['password'];
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-            $mail->Port = $this->config['port'];
-            
-            $mail->setFrom($this->config['from_email'], $this->config['from_name']);
-            $mail->addAddress($order->getEmail(), $order->getFullName());
-            
-            $mail->isHTML(true);
-            $mail->Subject = 'Order Confirmation - ' . $order->getOrderNumber();
-            $mail->Body = $this->buildOrderEmailHtml($order);
-            
-            $sent = $mail->send();
-            error_log("Email sent status: " . ($sent ? 'Success' : 'Failed'));
-            
-            return $sent;
-        } catch (Exception $e) {
-            error_log("Email sending failed: " . $e->getMessage());
-            return false;
-        }
-    }
-    
-    private function buildOrderEmailHtml(Order $order): string {
-        $itemsHTML = '';
-        foreach ($order->getItems() as $item) {
-            $itemTotal = $item['price'] * $item['quantity'];
-            $itemsHTML .= '
-                <tr>
-                    <td style="padding:10px; border-bottom:1px solid #eee;">' . htmlspecialchars($item['title']) . '</td>
-                    <td style="padding:10px; border-bottom:1px solid #eee; text-align:center;">' . $item['quantity'] . '</td>
-                    <td style="padding:10px; border-bottom:1px solid #eee; text-align:right;">₹' . number_format($item['price'], 2) . '</td>
-                    <td style="padding:10px; border-bottom:1px solid #eee; text-align:right;">₹' . number_format($itemTotal, 2) . '</td>
-                </tr>
-            ';
-        }
-        
-        return '
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #ddd;">
-            <div style="background: #f4a261; padding: 20px; text-align: center;">
-                <h1 style="color: white; margin: 0;">Order Confirmed!</h1>
-            </div>
-            
-            <div style="padding: 30px; background: #fff;">
-                <p style="font-size: 16px;">Dear ' . htmlspecialchars($order->getFullName()) . ',</p>
-                <p>Thank you for your order! Your payment has been received and your order is being processed.</p>
-                
-                <div style="background: #e8f5e9; padding: 15px; margin: 20px 0; border-radius: 5px; border-left: 4px solid #4caf50;">
-                    <p style="margin: 0; color: #2e7d32;"><strong>✓ Payment Successful</strong></p>
-                </div>
-                
-                <div style="background: #f8f8f8; padding: 20px; margin: 20px 0; border-radius: 5px;">
-                    <h3 style="margin-top: 0; color: #f4a261;">Order Details</h3>
-                    <table style="width: 100%; border-collapse: collapse;">
-                        <tr>
-                            <td style="padding: 8px 0;"><strong>Order Number:</strong></td>
-                            <td style="padding: 8px 0; text-align: right;">' . $order->getOrderNumber() . '</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 8px 0;"><strong>Payment ID:</strong></td>
-                            <td style="padding: 8px 0; text-align: right; font-size: 12px;">' . $order->getRazorpayPaymentId() . '</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 8px 0;"><strong>Payment Method:</strong></td>
-                            <td style="padding: 8px 0; text-align: right;">Razorpay</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 8px 0;"><strong>Order Date:</strong></td>
-                            <td style="padding: 8px 0; text-align: right;">' . date('F d, Y') . '</td>
-                        </tr>
-                    </table>
-                </div>
-                
-                <h3 style="color: #f4a261; margin-top: 30px;">Items Ordered</h3>
-                <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-                    <thead>
-                        <tr style="background: #f8f8f8;">
-                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd;">Product</th>
-                            <th style="padding: 12px; text-align: center; border-bottom: 2px solid #ddd;">Qty</th>
-                            <th style="padding: 12px; text-align: right; border-bottom: 2px solid #ddd;">Price</th>
-                            <th style="padding: 12px; text-align: right; border-bottom: 2px solid #ddd;">Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ' . $itemsHTML . '
-                    </tbody>
-                </table>
-                
-                <div style="text-align: right; margin-top: 20px; padding: 20px; background: #f8f8f8; border-radius: 5px;">
-                    <p style="margin: 8px 0;"><strong>Subtotal:</strong> ₹' . number_format($order->getSubtotal(), 2) . '</p>
-                    <p style="margin: 8px 0;"><strong>Shipping:</strong> <span style="color: #4caf50;">Free</span></p>
-                    <p style="margin: 8px 0;"><strong>Tax (18%):</strong> ₹' . number_format($order->getTax(), 2) . '</p>
-                    <p style="margin: 15px 0 0 0; font-size: 20px; color: #f4a261;"><strong>Total Paid:</strong> ₹' . number_format($order->getTotal(), 2) . '</p>
-                </div>
-                
-                <h3 style="color: #f4a261; margin-top: 30px;">Shipping Address</h3>
-                <div style="background: #f8f8f8; padding: 15px; border-radius: 5px;">
-                    <p style="margin: 5px 0;">' . htmlspecialchars($order->getAddressLine1()) . '</p>
-                    ' . ($order->getAddressLine2() ? '<p style="margin: 5px 0;">' . htmlspecialchars($order->getAddressLine2()) . '</p>' : '') . '
-                    <p style="margin: 5px 0;">' . htmlspecialchars($order->getCity()) . ', ' . htmlspecialchars($order->getState()) . ' - ' . htmlspecialchars($order->getPincode()) . '</p>
-                    <p style="margin: 5px 0;">' . htmlspecialchars($order->getCountry()) . '</p>
-                    <p style="margin: 10px 0 5px 0;"><strong>Phone:</strong> ' . htmlspecialchars($order->getPhone()) . '</p>
-                </div>
-                
-                <div style="background: #e3f2fd; padding: 15px; margin: 30px 0; border-radius: 5px; border-left: 4px solid #2196f3;">
-                    <p style="margin: 0; color: #1565c0;">
-                        <strong>📦 What\'s Next?</strong><br>
-                        We will send you a shipping confirmation email with tracking details once your order is shipped.
-                    </p>
-                </div>
-                
-                <p style="margin-top: 30px;">If you have any questions about your order, please contact our support team.</p>
-                
-                <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
-                    <p style="color: #666; margin: 5px 0;">Thank you for choosing HappyPouch!</p>
-                </div>
-            </div>
-            
-            <div style="background: #f8f8f8; padding: 20px; text-align: center; color: #666; border-top: 1px solid #ddd;">
-                <p style="margin: 0; font-size: 14px;">© ' . date('Y') . ' HappyPouch. All rights reserved.</p>
-                <p style="margin: 10px 0 0 0; font-size: 12px;">
-                    <a href="mailto:support@happypouch.com" style="color: #f4a261; text-decoration: none;">support@happypouch.com</a>
-                </p>
-            </div>
-        </div>
-        ';
-    }
-}
-
 class PaymentProcessor {
     private $conn;
-    private $emailService;
     private $orderRepository;
     private $cartRepository;
     
-    public function __construct($conn, EmailService $emailService) {
+    public function __construct($conn) {
         $this->conn = $conn;
-        $this->emailService = $emailService;
         $this->orderRepository = new OrderRepository($conn);
         $this->cartRepository = new CartRepository($conn);
     }
@@ -543,7 +397,6 @@ class PaymentProcessor {
         try {
             error_log("=== STARTING PAYMENT PROCESSING ===");
             error_log("User ID: " . $userId);
-            error_log("Payment Data: " . print_r($paymentData, true));
             
             $this->validatePaymentData($paymentData);
             
@@ -565,13 +418,6 @@ class PaymentProcessor {
             
             $this->conn->commit();
             error_log("Transaction committed");
-            
-            // Send email (non-blocking - don't fail if email fails)
-            try {
-                $this->emailService->sendOrderConfirmation($order);
-            } catch (Exception $e) {
-                error_log("Email sending failed but continuing: " . $e->getMessage());
-            }
             
             error_log("=== PAYMENT PROCESSING SUCCESSFUL ===");
             
@@ -637,29 +483,42 @@ class PaymentProcessor {
 error_log("=== PROCESS PAYMENT SCRIPT STARTED ===");
 error_log("Request Method: " . $_SERVER['REQUEST_METHOD']);
 error_log("POST Data: " . print_r($_POST, true));
-error_log("Session Data: " . print_r($_SESSION, true));
 
+// Check database connection
+if (!isset($conn) || !$conn) {
+    error_log("CRITICAL: Database connection not established");
+    die("Database connection error. Please contact support.");
+}
+
+// Verify user is logged in
 if (!User::isLoggedIn()) {
     error_log("User not logged in, redirecting to login");
     $_SESSION['error'] = "Please login to continue";
     safeRedirect('login.php');
 }
 
+// Verify request method
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    error_log("Invalid request method, redirecting to checkout");
+    error_log("Invalid request method: " . $_SERVER['REQUEST_METHOD']);
     $_SESSION['error'] = "Invalid request method";
     safeRedirect('checkout.php');
 }
 
+// Main processing block
 try {
     $userId = $_SESSION['user_id'];
     error_log("Processing payment for user ID: " . $userId);
     
+    // Check if checkout data exists in session
     if (!isset($_SESSION['checkout_data'])) {
+        error_log("Checkout data missing from session");
         throw new Exception("Session expired. Please checkout again.");
     }
     
     $checkoutData = $_SESSION['checkout_data'];
+    error_log("Checkout data retrieved from session");
+    
+    // Collect payment data from POST
     $paymentData = [
         'razorpay_payment_id' => $_POST['razorpay_payment_id'] ?? '',
         'razorpay_order_id' => $_POST['razorpay_order_id'] ?? '',
@@ -667,38 +526,28 @@ try {
         'order_number' => $_POST['order_number'] ?? ''
     ];
     
-    error_log("Payment Data received: " . print_r($paymentData, true));
+    error_log("Payment Data collected: razorpay_payment_id=" . $paymentData['razorpay_payment_id']);
+    error_log("Order Number: " . $paymentData['order_number']);
     
-    // Email Configuration
-    $emailConfig = [
-        'host' => 'smtp.gmail.com',
-        'username' => 'aparnaprasad363@gmail.com',
-        'password' => 'wbnh wldc yeqo sqzi',
-        'port' => 587,
-        'from_email' => 'aparnaprasad363@gmail.com',
-        'from_name' => 'HappyPouch'
-    ];
+    // Process Payment
+    error_log("Creating PaymentProcessor instance");
+    $processor = new PaymentProcessor($conn);
     
-    // Process Payment using OOP
-    error_log("Creating email service and payment processor");
-    $emailService = new EmailService($emailConfig);
-    $processor = new PaymentProcessor($conn, $emailService);
-    
-    error_log("Calling processRazorpayPayment");
+    error_log("Calling processRazorpayPayment method");
     $result = $processor->processRazorpayPayment($paymentData, $checkoutData, $userId);
     
-    error_log("Payment processed successfully");
+    error_log("Payment processed successfully!");
     error_log("Order Number: " . $result->getOrderNumber());
     
-    // Clear session and set success
+    // Clear session data and set success
     unset($_SESSION['checkout_data']);
     $_SESSION['success'] = $result->getMessage();
     $_SESSION['order_number'] = $result->getOrderNumber();
     
-    error_log("Session updated, preparing redirect");
-    error_log("Redirecting to order_success.php");
+    error_log("Session updated with success message");
+    error_log("Attempting redirect to order_success.php");
     
-    // Use the safe redirect function
+    // Redirect to success page
     safeRedirect('order_success.php', [
         'order' => $result->getOrderNumber()
     ]);
@@ -710,14 +559,19 @@ try {
     
 } catch (InvalidPaymentDataException $e) {
     error_log("InvalidPaymentDataException: " . $e->getMessage());
-    error_log("Stack trace: " . $e->getTraceAsString());
     $_SESSION['error'] = "Payment verification failed: " . $e->getMessage();
     safeRedirect('checkout.php');
     
 } catch (PaymentProcessingException $e) {
     error_log("PaymentProcessingException: " . $e->getMessage());
+    $paymentId = $_POST['razorpay_payment_id'] ?? 'N/A';
+    $_SESSION['error'] = "Order processing failed. Please contact support with Payment ID: " . $paymentId;
+    safeRedirect('checkout.php');
+    
+} catch (DatabaseException $e) {
+    error_log("DatabaseException: " . $e->getMessage());
     error_log("Stack trace: " . $e->getTraceAsString());
-    $_SESSION['error'] = "Order processing failed. Please contact support with Payment ID: " . ($_POST['razorpay_payment_id'] ?? 'N/A');
+    $_SESSION['error'] = "Database error occurred. Please contact support.";
     safeRedirect('checkout.php');
     
 } catch (Exception $e) {
@@ -726,7 +580,7 @@ try {
     error_log("Stack trace: " . $e->getTraceAsString());
     error_log("POST data: " . print_r($_POST, true));
     error_log("Session data: " . print_r($_SESSION, true));
-    $_SESSION['error'] = "An unexpected error occurred. Please try again.";
+    $_SESSION['error'] = "An unexpected error occurred. Please try again or contact support.";
     safeRedirect('checkout.php');
 }
 
