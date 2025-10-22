@@ -1,4 +1,7 @@
 <?php
+// Start output buffering to prevent any accidental output
+ob_start();
+
 session_start();
 require_once("db.php");
 require_once("User.php");
@@ -10,6 +13,42 @@ require 'PHPMailer-master/src/SMTP.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
+
+// ==================== HELPER FUNCTION ====================
+/**
+ * Safe redirect function that works in both localhost and production
+ */
+function safeRedirect($page, $params = []) {
+    // Clear any output buffers
+    while (ob_get_level()) {
+        ob_end_clean();
+    }
+    
+    // Build absolute URL
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https" : "http";
+    $host = $_SERVER['HTTP_HOST'];
+    
+    // Get the directory path (handles subdirectories)
+    $scriptPath = dirname($_SERVER['SCRIPT_NAME']);
+    if ($scriptPath === '/' || $scriptPath === '\\') {
+        $scriptPath = '';
+    }
+    
+    // Build URL
+    $url = $protocol . "://" . $host . $scriptPath . "/" . ltrim($page, '/');
+    
+    // Add query parameters
+    if (!empty($params)) {
+        $url .= '?' . http_build_query($params);
+    }
+    
+    // Log for debugging
+    error_log("Redirecting to: " . $url);
+    
+    // Perform redirect
+    header("Location: " . $url, true, 302);
+    exit();
+}
 
 // ==================== EXCEPTION CLASSES ====================
 class PaymentProcessingException extends Exception {}
@@ -187,6 +226,10 @@ class OrderRepository {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
             
             $stmt = $this->conn->prepare($sql);
+            if (!$stmt) {
+                throw new DatabaseException("Failed to prepare statement: " . $this->conn->error);
+            }
+            
             $stmt->bind_param(
                 "issssssssssssssdddss",
                 $data['user_id'], $data['order_number'], $data['payment_method'],
@@ -205,6 +248,10 @@ class OrderRepository {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
             
             $stmt = $this->conn->prepare($sql);
+            if (!$stmt) {
+                throw new DatabaseException("Failed to prepare statement: " . $this->conn->error);
+            }
+            
             $stmt->bind_param(
                 "issssssssssssssddd",
                 $data['user_id'], $data['order_number'], $data['payment_method'],
@@ -221,7 +268,10 @@ class OrderRepository {
             throw new DatabaseException("Failed to save order: " . $stmt->error);
         }
         
-        return $this->conn->insert_id;
+        $insertId = $this->conn->insert_id;
+        error_log("Order saved successfully with ID: " . $insertId);
+        
+        return $insertId;
     }
     
     public function saveOrderItem(OrderItem $item): bool {
@@ -230,6 +280,10 @@ class OrderRepository {
                 VALUES (?, ?, ?, ?, ?)";
         
         $stmt = $this->conn->prepare($sql);
+        if (!$stmt) {
+            throw new DatabaseException("Failed to prepare order item statement: " . $this->conn->error);
+        }
+        
         $stmt->bind_param(
             "iiidd",
             $data['order_id'], $data['product_id'], $data['quantity'],
@@ -263,6 +317,10 @@ class CartRepository {
                 WHERE c.user_id = ?";
         
         $stmt = $this->conn->prepare($sql);
+        if (!$stmt) {
+            throw new DatabaseException("Failed to prepare cart query: " . $this->conn->error);
+        }
+        
         $stmt->bind_param("i", $userId);
         $stmt->execute();
         
@@ -272,17 +330,25 @@ class CartRepository {
             $items[] = $row;
         }
         
+        error_log("Retrieved " . count($items) . " cart items for user " . $userId);
+        
         return $items;
     }
     
     public function clearCart(int $userId): bool {
         $sql = "DELETE FROM cart WHERE user_id = ?";
         $stmt = $this->conn->prepare($sql);
+        if (!$stmt) {
+            throw new DatabaseException("Failed to prepare clear cart statement: " . $this->conn->error);
+        }
+        
         $stmt->bind_param("i", $userId);
         
         if (!$stmt->execute()) {
             throw new DatabaseException("Failed to clear cart: " . $stmt->error);
         }
+        
+        error_log("Cart cleared for user " . $userId);
         
         return true;
     }
@@ -302,6 +368,10 @@ class ProductRepository {
         
         $sql = "UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?";
         $stmt = $this->conn->prepare($sql);
+        if (!$stmt) {
+            throw new DatabaseException("Failed to prepare stock update: " . $this->conn->error);
+        }
+        
         $stmt->bind_param("iii", $quantity, $productId, $quantity);
         
         return $stmt->execute();
@@ -340,7 +410,10 @@ class EmailService {
             $mail->Subject = 'Order Confirmation - ' . $order->getOrderNumber();
             $mail->Body = $this->buildOrderEmailHtml($order);
             
-            return $mail->send();
+            $sent = $mail->send();
+            error_log("Email sent status: " . ($sent ? 'Success' : 'Failed'));
+            
+            return $sent;
         } catch (Exception $e) {
             error_log("Email sending failed: " . $e->getMessage());
             return false;
@@ -468,6 +541,10 @@ class PaymentProcessor {
     
     public function processRazorpayPayment(array $paymentData, array $checkoutData, int $userId): OrderResult {
         try {
+            error_log("=== STARTING PAYMENT PROCESSING ===");
+            error_log("User ID: " . $userId);
+            error_log("Payment Data: " . print_r($paymentData, true));
+            
             $this->validatePaymentData($paymentData);
             
             $cartItems = $this->cartRepository->getCartItems($userId);
@@ -475,27 +552,48 @@ class PaymentProcessor {
                 throw new CartEmptyException("Cart is empty");
             }
             
+            error_log("Cart items count: " . count($cartItems));
+            
             $this->conn->begin_transaction();
+            error_log("Transaction started");
             
             $order = $this->createOrder($userId, $paymentData, $checkoutData, $cartItems);
+            error_log("Order created with ID: " . $order->getId());
+            
             $this->cartRepository->clearCart($userId);
+            error_log("Cart cleared");
             
             $this->conn->commit();
+            error_log("Transaction committed");
             
-            $this->emailService->sendOrderConfirmation($order);
+            // Send email (non-blocking - don't fail if email fails)
+            try {
+                $this->emailService->sendOrderConfirmation($order);
+            } catch (Exception $e) {
+                error_log("Email sending failed but continuing: " . $e->getMessage());
+            }
+            
+            error_log("=== PAYMENT PROCESSING SUCCESSFUL ===");
             
             return new OrderResult(true, $order->getOrderNumber(), "Payment successful! Your order has been placed.");
             
         } catch (Exception $e) {
-            $this->conn->rollback();
+            if ($this->conn->inTransaction()) {
+                $this->conn->rollback();
+                error_log("Transaction rolled back");
+            }
             error_log("Payment processing failed: " . $e->getMessage());
+            error_log("Stack trace: " . $e->getTraceAsString());
             throw new PaymentProcessingException($e->getMessage(), 0, $e);
         }
     }
     
     private function validatePaymentData(array $data): void {
-        if (empty($data['razorpay_payment_id']) || empty($data['order_number'])) {
-            throw new InvalidPaymentDataException("Invalid payment data");
+        if (empty($data['razorpay_payment_id'])) {
+            throw new InvalidPaymentDataException("Missing Razorpay payment ID");
+        }
+        if (empty($data['order_number'])) {
+            throw new InvalidPaymentDataException("Missing order number");
         }
     }
     
@@ -536,18 +634,26 @@ class PaymentProcessor {
 }
 
 // ==================== CONTROLLER LOGIC ====================
+error_log("=== PROCESS PAYMENT SCRIPT STARTED ===");
+error_log("Request Method: " . $_SERVER['REQUEST_METHOD']);
+error_log("POST Data: " . print_r($_POST, true));
+error_log("Session Data: " . print_r($_SESSION, true));
+
 if (!User::isLoggedIn()) {
-    header("Location: login.php");
-    exit();
+    error_log("User not logged in, redirecting to login");
+    $_SESSION['error'] = "Please login to continue";
+    safeRedirect('login.php');
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header("Location: checkout.php");
-    exit();
+    error_log("Invalid request method, redirecting to checkout");
+    $_SESSION['error'] = "Invalid request method";
+    safeRedirect('checkout.php');
 }
 
 try {
     $userId = $_SESSION['user_id'];
+    error_log("Processing payment for user ID: " . $userId);
     
     if (!isset($_SESSION['checkout_data'])) {
         throw new Exception("Session expired. Please checkout again.");
@@ -561,6 +667,8 @@ try {
         'order_number' => $_POST['order_number'] ?? ''
     ];
     
+    error_log("Payment Data received: " . print_r($paymentData, true));
+    
     // Email Configuration
     $emailConfig = [
         'host' => 'smtp.gmail.com',
@@ -572,34 +680,55 @@ try {
     ];
     
     // Process Payment using OOP
+    error_log("Creating email service and payment processor");
     $emailService = new EmailService($emailConfig);
     $processor = new PaymentProcessor($conn, $emailService);
+    
+    error_log("Calling processRazorpayPayment");
     $result = $processor->processRazorpayPayment($paymentData, $checkoutData, $userId);
+    
+    error_log("Payment processed successfully");
+    error_log("Order Number: " . $result->getOrderNumber());
     
     // Clear session and set success
     unset($_SESSION['checkout_data']);
     $_SESSION['success'] = $result->getMessage();
     $_SESSION['order_number'] = $result->getOrderNumber();
     
-    header("Location: order_success.php?order=" . urlencode($result->getOrderNumber()));
-    exit();
+    error_log("Session updated, preparing redirect");
+    error_log("Redirecting to order_success.php");
+    
+    // Use the safe redirect function
+    safeRedirect('order_success.php', [
+        'order' => $result->getOrderNumber()
+    ]);
     
 } catch (CartEmptyException $e) {
+    error_log("CartEmptyException: " . $e->getMessage());
     $_SESSION['error'] = $e->getMessage();
-    header("Location: cart.php");
-    exit();
+    safeRedirect('cart.php');
+    
 } catch (InvalidPaymentDataException $e) {
+    error_log("InvalidPaymentDataException: " . $e->getMessage());
+    error_log("Stack trace: " . $e->getTraceAsString());
     $_SESSION['error'] = "Payment verification failed: " . $e->getMessage();
-    header("Location: checkout.php");
-    exit();
+    safeRedirect('checkout.php');
+    
 } catch (PaymentProcessingException $e) {
+    error_log("PaymentProcessingException: " . $e->getMessage());
+    error_log("Stack trace: " . $e->getTraceAsString());
     $_SESSION['error'] = "Order processing failed. Please contact support with Payment ID: " . ($_POST['razorpay_payment_id'] ?? 'N/A');
-    header("Location: checkout.php");
-    exit();
+    safeRedirect('checkout.php');
+    
 } catch (Exception $e) {
-    error_log("Unexpected error: " . $e->getMessage());
+    error_log("Unexpected Exception: " . $e->getMessage());
+    error_log("Exception type: " . get_class($e));
+    error_log("Stack trace: " . $e->getTraceAsString());
+    error_log("POST data: " . print_r($_POST, true));
+    error_log("Session data: " . print_r($_SESSION, true));
     $_SESSION['error'] = "An unexpected error occurred. Please try again.";
-    header("Location: checkout.php");
-    exit();
+    safeRedirect('checkout.php');
 }
+
+error_log("=== PROCESS PAYMENT SCRIPT ENDED (This should not appear if redirect worked) ===");
 ?>

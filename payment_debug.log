@@ -1,0 +1,64 @@
+[2025-10-22 10:09:05] === PAYMENT PROCESSING STARTED ===
+[2025-10-22 10:09:05] Request Method
+Data: POST
+[2025-10-22 10:09:05] POST Data
+Data: Array
+(
+    [razorpay_payment_id] => pay_RWRnsET1IuxZLQ
+    [razorpay_order_id] => 
+    [razorpay_signature] => 
+    [order_number] => HP20251022EB86A2
+)
+
+[2025-10-22 10:09:05] Session ID
+Data: iitsr147dpe10p1j6gvr602snv
+[2025-10-22 10:09:05] User ID
+Data: 1
+[2025-10-22 10:09:05] Payment Data Received
+Data: Array
+(
+    [payment_id] => pay_RWRnsET1IuxZLQ
+    [order_id] => 
+    [signature] => 
+    [order_number] => HP20251022EB86A2
+)
+
+[2025-10-22 10:09:05] Checkout Data Retrieved
+Data: Array
+(
+    [full_name] => Aparna Prasad
+    [email] => aparna@gmail.com
+    [phone] => 9605532456
+    [address_line1] => Narakatholil (H) Edakadathy P.O Edakadathy,Pathanamthitta (dist)
+    [address_line2] => Narakatholil (H) Edakadathy P.O Edakadathy,Pathanamthitta (dist)
+    [city] => Ranni
+    [state] => Kerala
+    [pincode] => 686510
+    [country] => India
+    [order_notes] => 
+    [subtotal] => 499
+    [tax] => 89.82
+    [total] => 588.82
+)
+
+[2025-10-22 10:09:05] Cart Items Retrieved
+Data: 1 items
+[2025-10-22 10:09:05] Database transaction started
+[2025-10-22 10:09:05] CRITICAL ERROR: Transaction rolled back
+Data: Array
+(
+    [error] => Unknown column 'razorpay_payment_id' in 'field list'
+    [trace] => #0 C:\xampp\htdocs\bag\process_razorpay_payment.php(201): mysqli->prepare('INSERT INTO ord...')
+#1 {main}
+)
+
+[2025-10-22 10:12:44] === Payment Processing Started ===
+[2025-10-22 10:12:44] Payment ID: pay_RWRriKOcFn4kpJ
+[2025-10-22 10:12:44] Order ID: 
+[2025-10-22 10:12:44] Order Number: HP202510223ABC32
+[2025-10-22 10:12:44] Checkout data retrieved from session
+[2025-10-22 10:12:44] Cart items count: 1
+[2025-10-22 10:12:44] Starting database transaction
+[2025-10-22 10:12:44] ERROR: Unknown column 'razorpay_payment_id' in 'field list'
+[2025-10-22 10:12:44] Stack trace: #0 C:\xampp\htdocs\bag\process_razorpay_payment.php(123): mysqli->prepare('\r\n        INSER...')
+#1 {main}
