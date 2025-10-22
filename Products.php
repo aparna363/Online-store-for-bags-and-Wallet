@@ -82,7 +82,13 @@ $currentUser = User::getCurrentUser();
     .product-stock.out-stock {color:#f44336;}
     .add-to-cart-btn {width:100%; padding:12px; background:#f4a261; color:white; border:none; border-radius:10px; font-weight:600; cursor:pointer; transition:0.3s; font-size:1rem;}
     .add-to-cart-btn:hover {background:#e07b39; transform:scale(1.02);}
-    .add-to-cart-btn:disabled {background:#ccc; cursor:not-allowed;}
+    .add-to-cart-btn:disabled {background:#ccc; cursor:not-allowed; transform:none;}
+    .add-to-cart-btn.adding {background:#999; cursor:wait;}
+    
+    /* Toast Notification */
+    .toast {position:fixed; top:20px; right:20px; background:#4caf50; color:white; padding:15px 25px; border-radius:10px; box-shadow:0 5px 20px rgba(0,0,0,0.3); z-index:1000; opacity:0; transform:translateX(400px); transition:all 0.3s ease;}
+    .toast.show {opacity:1; transform:translateX(0);}
+    .toast.error {background:#f44336;}
     
     /* Empty State */
     .empty-state {text-align:center; padding:80px 20px; color:#999;}
@@ -167,7 +173,7 @@ $currentUser = User::getCurrentUser();
               </div>
               <?php if ($isLoggedIn): ?>
                 <?php if ($item['quantity'] > 0): ?>
-                  <button class="add-to-cart-btn" onclick="addToCart(<?= $item['id'] ?>)">Add to Cart</button>
+                  <button class="add-to-cart-btn" data-product-id="<?= $item['id'] ?>" onclick="addToCart(<?= $item['id'] ?>, this)">Add to Cart</button>
                 <?php else: ?>
                   <button class="add-to-cart-btn" disabled>Out of Stock</button>
                 <?php endif; ?>
@@ -185,28 +191,70 @@ $currentUser = User::getCurrentUser();
     <p>© 2025 HappyPouch — Style That Smiles Back</p>
   </footer>
 
+  <!-- Toast Notification -->
+  <div class="toast" id="toast"></div>
+
   <script>
+    // Show toast notification
+    function showToast(message, isError = false) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = 'toast' + (isError ? ' error' : '');
+      toast.classList.add('show');
+      
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+
     // Add to cart function
-    function addToCart(productId) {
+    function addToCart(productId, buttonElement) {
+      console.log('Adding product to cart:', productId);
+      
+      // Disable button and show loading state
+      buttonElement.disabled = true;
+      buttonElement.classList.add('adding');
+      const originalText = buttonElement.textContent;
+      buttonElement.textContent = 'Adding...';
+
       fetch('cart_handler.php', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: 'action=add&product_id=' + productId
+        body: new URLSearchParams({
+          action: 'add',
+          product_id: productId
+        })
       })
-      .then(response => response.json())
+      .then(response => {
+        console.log('Response status:', response.status);
+        return response.json();
+      })
       .then(data => {
+        console.log('Response data:', data);
+        
+        // Re-enable button
+        buttonElement.disabled = false;
+        buttonElement.classList.remove('adding');
+        buttonElement.textContent = originalText;
+        
         if (data.success) {
-          alert('Product added to cart!');
+          showToast('✓ Product added to cart!');
           updateCartCount();
         } else {
-          alert(data.message || 'Failed to add product to cart');
+          showToast('✗ ' + (data.message || 'Failed to add product'), true);
         }
       })
       .catch(error => {
         console.error('Error:', error);
-        alert('An error occurred');
+        
+        // Re-enable button
+        buttonElement.disabled = false;
+        buttonElement.classList.remove('adding');
+        buttonElement.textContent = originalText;
+        
+        showToast('✗ An error occurred. Please try again.', true);
       });
     }
 
@@ -215,12 +263,21 @@ $currentUser = User::getCurrentUser();
       fetch('cart_handler.php?action=count')
         .then(response => response.json())
         .then(data => {
-          document.getElementById('cartCount').textContent = data.count || 0;
+          console.log('Cart count:', data.count);
+          const cartCountElement = document.getElementById('cartCount');
+          if (cartCountElement) {
+            cartCountElement.textContent = data.count || 0;
+          }
+        })
+        .catch(error => {
+          console.error('Error updating cart count:', error);
         });
     }
 
-    // Initial cart count update
-    updateCartCount();
+    // Initial cart count update on page load
+    <?php if ($isLoggedIn): ?>
+      updateCartCount();
+    <?php endif; ?>
   </script>
 
 </body>
